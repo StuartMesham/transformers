@@ -148,6 +148,15 @@ class TrainingArguments:
         default=False,
         metadata={"help": "When performing evaluation and predictions, only returns the loss."},
     )
+    patience: int = field(
+        default=-1,
+        metadata={
+            "help": (
+                "If > 0: stops training after evaluating this many times consecutively with non-decreasing loss."
+                "Requires evaluate_during_training."
+            )
+        },
+    )
 
     per_device_train_batch_size: int = field(
         default=8, metadata={"help": "Batch size per GPU/TPU core/CPU for training."}

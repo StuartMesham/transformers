@@ -228,6 +228,8 @@ class Trainer:
             model = model_init()
         self.model = model.to(args.device) if model is not None else None
         default_collator = default_data_collator if tokenizer is None else DataCollatorWithPadding(tokenizer)
+        if self.args.patience > 0 and not self.args.evaluate_during_training:
+            raise ValueError("Patience requires evaluate_during_training.")
         self.data_collator = data_collator if data_collator is not None else default_collator
         self.train_dataset = train_dataset
         self.eval_dataset = eval_dataset
@@ -685,6 +687,9 @@ class Trainer:
 
         tr_loss = torch.tensor(0.0).to(self.args.device)
         logging_loss_scalar = 0.0
+        patience_best_eval_loss = None
+        patience_evals_without_improvement = 0
+        patience_should_stop = False
         model.zero_grad()
         disable_tqdm = self.args.disable_tqdm or not self.is_local_process_zero()
         train_pbar = trange(epochs_trained, int(np.ceil(num_train_epochs)), desc="Epoch", disable=disable_tqdm)
@@ -761,6 +766,20 @@ class Trainer:
                         metrics = self.evaluate()
                         self._report_to_hp_search(trial, epoch, metrics)
 
+                        if self.args.patience > 0:
+                            # Keep track of best loss to determine if we should stop early
+                            eval_loss = metrics["eval_loss"]
+                            if not patience_best_eval_loss or eval_loss < patience_best_eval_loss:
+                                patience_evals_without_improvement = 0
+                                best_eval_loss = eval_loss
+                            else:
+                                patience_evals_without_improvement += 1
+                                if patience_evals_without_improvement >= self.args.patience:
+                                    patience_should_stop = True
+                                    logger.info(
+                                        f"Patience threshold ({self.args.patience}) exceeded, stopping training"
+                                    )
+
                     if self.args.save_steps > 0 and self.global_step % self.args.save_steps == 0:
                         # In all cases (even distributed/parallel), self.model is always a reference
                         # to the model we want to save.
@@ -795,7 +814,7 @@ class Trainer:
                             torch.save(self.lr_scheduler.state_dict(), os.path.join(output_dir, "scheduler.pt"))
 
                 epoch_pbar.update(1)
-                if self.args.max_steps > 0 and self.global_step >= self.args.max_steps:
+                if (self.args.max_steps > 0 and self.global_step >= self.args.max_steps) or patience_should_stop:
                     break
             epoch_pbar.close()
             train_pbar.update(1)
@@ -808,7 +827,7 @@ class Trainer:
                         "You enabled PyTorch/XLA debug metrics but you don't have a TPU "
                         "configured. Check your training configuration if this is unexpected."
                     )
-            if self.args.max_steps > 0 and self.global_step >= self.args.max_steps:
+            if (self.args.max_steps > 0 and self.global_step >= self.args.max_steps) or patience_should_stop:
                 break
 
         train_pbar.close()
