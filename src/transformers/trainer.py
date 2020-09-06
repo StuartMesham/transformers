@@ -228,6 +228,8 @@ class Trainer:
             model = model_init()
         self.model = model.to(args.device) if model is not None else None
         default_collator = default_data_collator if tokenizer is None else DataCollatorWithPadding(tokenizer)
+        if self.args.patience > 0 and not self.args.evaluate_during_training:
+            raise ValueError("Patience requires evaluate_during_training.")
         self.data_collator = data_collator if data_collator is not None else default_collator
         self.train_dataset = train_dataset
         self.eval_dataset = eval_dataset
@@ -260,7 +262,7 @@ class Trainer:
         self._loggers_initialized = False
 
         # Create output directory if needed
-        if self.is_world_process_zero():
+        if self.args.save_steps > 0 and self.is_world_process_zero():
             os.makedirs(self.args.output_dir, exist_ok=True)
         if is_torch_tpu_available():
             # Set an xla_device flag on the model's config.
@@ -640,9 +642,9 @@ class Trainer:
                 find_unused_parameters=True,
             )
 
-        if self.tb_writer is not None:
-            self.tb_writer.add_text("args", self.args.to_json_string())
-            self.tb_writer.add_hparams(self.args.to_sanitized_dict(), metric_dict={})
+        # if self.tb_writer is not None:
+        #     self.tb_writer.add_text("args", self.args.to_json_string())
+        #     self.tb_writer.add_hparams(self.args.to_sanitized_dict(), metric_dict={})
 
         # Train!
         if is_torch_tpu_available():
@@ -685,9 +687,13 @@ class Trainer:
 
         tr_loss = torch.tensor(0.0).to(self.args.device)
         logging_loss_scalar = 0.0
+        patience_best_eval_loss = None
+        patience_evals_without_improvement = 0
+        patience_should_stop = False
         model.zero_grad()
         disable_tqdm = self.args.disable_tqdm or not self.is_local_process_zero()
-        train_pbar = trange(epochs_trained, int(np.ceil(num_train_epochs)), desc="Epoch", disable=disable_tqdm)
+        step_pbar = trange(self.global_step, t_total, desc="Step", disable=disable_tqdm)
+        # train_pbar = trange(epochs_trained, int(np.ceil(num_train_epochs)), desc="Epoch", disable=disable_tqdm)
         for epoch in range(epochs_trained, int(np.ceil(num_train_epochs))):
             if isinstance(train_dataloader, DataLoader) and isinstance(train_dataloader.sampler, DistributedSampler):
                 train_dataloader.sampler.set_epoch(epoch)
@@ -704,13 +710,13 @@ class Trainer:
             if self.args.past_index >= 0:
                 self._past = None
 
-            epoch_pbar = tqdm(epoch_iterator, desc="Iteration", disable=disable_tqdm)
+            # epoch_pbar = tqdm(epoch_iterator, desc="Iteration", disable=disable_tqdm)
             for step, inputs in enumerate(epoch_iterator):
 
                 # Skip past any already trained steps if resuming training
                 if steps_trained_in_current_epoch > 0:
                     steps_trained_in_current_epoch -= 1
-                    epoch_pbar.update(1)
+                    # epoch_pbar.update(1)
                     continue
 
                 tr_loss += self.training_step(model, inputs)
@@ -761,6 +767,20 @@ class Trainer:
                         metrics = self.evaluate()
                         self._report_to_hp_search(trial, epoch, metrics)
 
+                        if self.args.patience > 0:
+                            # Keep track of best loss to determine if we should stop early
+                            eval_loss = metrics["eval_loss"]
+                            if not patience_best_eval_loss or eval_loss < patience_best_eval_loss:
+                                patience_evals_without_improvement = 0
+                                best_eval_loss = eval_loss
+                            else:
+                                patience_evals_without_improvement += 1
+                                if patience_evals_without_improvement >= self.args.patience:
+                                    patience_should_stop = True
+                                    logger.info(
+                                        f"Patience threshold ({self.args.patience}) exceeded, stopping training"
+                                    )
+
                     if self.args.save_steps > 0 and self.global_step % self.args.save_steps == 0:
                         # In all cases (even distributed/parallel), self.model is always a reference
                         # to the model we want to save.
@@ -794,11 +814,12 @@ class Trainer:
                             torch.save(self.optimizer.state_dict(), os.path.join(output_dir, "optimizer.pt"))
                             torch.save(self.lr_scheduler.state_dict(), os.path.join(output_dir, "scheduler.pt"))
 
-                epoch_pbar.update(1)
-                if self.args.max_steps > 0 and self.global_step >= self.args.max_steps:
+                # epoch_pbar.update(1)
+                step_pbar.update(1)
+                if (self.args.max_steps > 0 and self.global_step >= self.args.max_steps) or patience_should_stop:
                     break
-            epoch_pbar.close()
-            train_pbar.update(1)
+            # epoch_pbar.close()
+            # train_pbar.update(1)
             if self.args.tpu_metrics_debug or self.args.debug:
                 if is_torch_tpu_available():
                     # tpu-comment: Logging debug metrics for PyTorch/XLA (compile, execute times, ops, etc.)
@@ -808,10 +829,11 @@ class Trainer:
                         "You enabled PyTorch/XLA debug metrics but you don't have a TPU "
                         "configured. Check your training configuration if this is unexpected."
                     )
-            if self.args.max_steps > 0 and self.global_step >= self.args.max_steps:
+            if (self.args.max_steps > 0 and self.global_step >= self.args.max_steps) or patience_should_stop:
                 break
 
-        train_pbar.close()
+        # train_pbar.close()
+        step_pbar.close()
         if self.tb_writer:
             self.tb_writer.close()
         if self.args.past_index and hasattr(self, "_past"):
