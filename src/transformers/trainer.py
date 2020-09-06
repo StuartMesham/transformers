@@ -692,7 +692,8 @@ class Trainer:
         patience_should_stop = False
         model.zero_grad()
         disable_tqdm = self.args.disable_tqdm or not self.is_local_process_zero()
-        train_pbar = trange(epochs_trained, int(np.ceil(num_train_epochs)), desc="Epoch", disable=disable_tqdm)
+        step_pbar = trange(self.global_step, t_total, desc="Step", disable=disable_tqdm)
+        # train_pbar = trange(epochs_trained, int(np.ceil(num_train_epochs)), desc="Epoch", disable=disable_tqdm)
         for epoch in range(epochs_trained, int(np.ceil(num_train_epochs))):
             if isinstance(train_dataloader, DataLoader) and isinstance(train_dataloader.sampler, DistributedSampler):
                 train_dataloader.sampler.set_epoch(epoch)
@@ -709,13 +710,13 @@ class Trainer:
             if self.args.past_index >= 0:
                 self._past = None
 
-            epoch_pbar = tqdm(epoch_iterator, desc="Iteration", disable=disable_tqdm)
+            # epoch_pbar = tqdm(epoch_iterator, desc="Iteration", disable=disable_tqdm)
             for step, inputs in enumerate(epoch_iterator):
 
                 # Skip past any already trained steps if resuming training
                 if steps_trained_in_current_epoch > 0:
                     steps_trained_in_current_epoch -= 1
-                    epoch_pbar.update(1)
+                    # epoch_pbar.update(1)
                     continue
 
                 tr_loss += self.training_step(model, inputs)
@@ -813,11 +814,12 @@ class Trainer:
                             torch.save(self.optimizer.state_dict(), os.path.join(output_dir, "optimizer.pt"))
                             torch.save(self.lr_scheduler.state_dict(), os.path.join(output_dir, "scheduler.pt"))
 
-                epoch_pbar.update(1)
+                # epoch_pbar.update(1)
+                step_pbar.update(1)
                 if (self.args.max_steps > 0 and self.global_step >= self.args.max_steps) or patience_should_stop:
                     break
-            epoch_pbar.close()
-            train_pbar.update(1)
+            # epoch_pbar.close()
+            # train_pbar.update(1)
             if self.args.tpu_metrics_debug or self.args.debug:
                 if is_torch_tpu_available():
                     # tpu-comment: Logging debug metrics for PyTorch/XLA (compile, execute times, ops, etc.)
@@ -830,7 +832,8 @@ class Trainer:
             if (self.args.max_steps > 0 and self.global_step >= self.args.max_steps) or patience_should_stop:
                 break
 
-        train_pbar.close()
+        # train_pbar.close()
+        step_pbar.close()
         if self.tb_writer:
             self.tb_writer.close()
         if self.args.past_index and hasattr(self, "_past"):
