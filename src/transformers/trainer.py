@@ -262,7 +262,7 @@ class Trainer:
         self._loggers_initialized = False
 
         # Create output directory if needed
-        if self.is_world_process_zero():
+        if self.args.save_steps > 0 and self.is_world_process_zero():
             os.makedirs(self.args.output_dir, exist_ok=True)
         if is_torch_tpu_available():
             # Set an xla_device flag on the model's config.
