@@ -777,7 +777,7 @@ class Trainer:
                             eval_loss = metrics["eval_loss"]
                             if not patience_best_eval_loss or eval_loss < patience_best_eval_loss:
                                 patience_evals_without_improvement = 0
-                                best_eval_loss = eval_loss
+                                patience_best_eval_loss = eval_loss
                             else:
                                 patience_evals_without_improvement += 1
                                 if patience_evals_without_improvement >= self.args.patience:
