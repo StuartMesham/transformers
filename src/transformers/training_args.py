@@ -262,6 +262,10 @@ class TrainingArguments:
         default=None, metadata={"help": "Whether or not to disable the tqdm progress bars during prediction."}
     )
 
+    hparams: Optional[dict] = field(
+        default=None, metadata={"help": "hyper parameters to log with tensorboard run"}
+    )
+
     def __post_init__(self):
         if self.disable_train_tqdm is None:
             self.disable_train_tqdm = logger.getEffectiveLevel() > logging.WARN

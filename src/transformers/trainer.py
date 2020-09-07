@@ -1,4 +1,5 @@
 import inspect
+import json
 import math
 import os
 import re
@@ -647,8 +648,8 @@ class Trainer:
                 find_unused_parameters=True,
             )
 
-        # if self.tb_writer is not None:
-        #     self.tb_writer.add_text("args", self.args.to_json_string())
+        if self.tb_writer is not None and self.args.hparams is not None:
+            self.tb_writer.add_text('hparams', json.dumps(self.args.hparams))
         #     self.tb_writer.add_hparams(self.args.to_sanitized_dict(), metric_dict={})
 
         # Train!
