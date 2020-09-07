@@ -213,6 +213,7 @@ class Trainer:
         compute_metrics: Optional[Callable[[EvalPrediction], Dict]] = None,
         tb_writer: Optional["SummaryWriter"] = None,
         optimizers: Tuple[torch.optim.Optimizer, torch.optim.lr_scheduler.LambdaLR] = (None, None),
+        log_to_console=True,
         **kwargs,
     ):
         if args is None:
@@ -236,6 +237,7 @@ class Trainer:
         self.tokenizer = tokenizer
         self.model_init = model_init
         self.compute_metrics = compute_metrics
+        self.log_to_console = log_to_console
         self.optimizer, self.lr_scheduler = optimizers
         if model_init is not None and (self.optimizer is not None or self.lr_scheduler is not None):
             raise RuntimeError(
@@ -694,7 +696,7 @@ class Trainer:
         patience_evals_without_improvement = 0
         patience_should_stop = False
         model.zero_grad()
-        disable_tqdm = self.args.disable_tqdm or not self.is_local_process_zero()
+        disable_tqdm = self.args.disable_train_tqdm or not self.is_local_process_zero()
         step_pbar = trange(self.global_step, t_total, desc="Step", disable=disable_tqdm)
         # train_pbar = trange(epochs_trained, int(np.ceil(num_train_epochs)), desc="Epoch", disable=disable_tqdm)
         for epoch in range(epochs_trained, int(np.ceil(num_train_epochs))):
@@ -978,7 +980,7 @@ class Trainer:
         output = {**logs, **{"step": self.global_step}}
         if iterator is not None:
             iterator.write(output)
-        else:
+        elif self.log_to_console:
             print(output)
 
     def _prepare_inputs(self, inputs: Dict[str, Union[torch.Tensor, Any]]) -> Dict[str, Union[torch.Tensor, Any]]:
@@ -1269,7 +1271,7 @@ class Trainer:
         if self.args.past_index >= 0:
             self._past = None
 
-        disable_tqdm = not self.is_local_process_zero() or self.args.disable_tqdm
+        disable_tqdm = not self.is_local_process_zero() or self.args.disable_prediction_tqdm
         samples_count = 0
         for inputs in tqdm(dataloader, desc=description, disable=disable_tqdm):
             loss, logits, labels = self.prediction_step(model, inputs, prediction_loss_only)
