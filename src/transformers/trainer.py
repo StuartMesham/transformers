@@ -291,6 +291,9 @@ class Trainer:
         self.hp_search_backend = None
         self.use_tune_checkpoints = False
 
+        self.eval_dataset_characters = 0
+        self.eval_dataset_characters_calculated = False
+
     def _remove_unused_columns(self, dataset: "nlp.Dataset", description: Optional[str] = None):
         if not self.args.remove_unused_columns:
             return
@@ -1270,14 +1273,18 @@ class Trainer:
         samples_count = 0
         for inputs in tqdm(dataloader, desc=description, disable=disable_tqdm):
             loss, logits, labels = self.prediction_step(model, inputs, prediction_loss_only)
-            batch_size = inputs[list(inputs.keys())[0]].shape[0]
+            batch_size = inputs[list(inputs.keys())[0]].numel()
             samples_count += batch_size
+            if not self.eval_dataset_characters_calculated:
+                self.eval_dataset_characters += len(self.tokenizer.decode(inputs['input_ids'].view(-1).tolist()))
             if loss is not None:
                 eval_losses.append(loss * batch_size)
             if logits is not None:
                 preds = logits if preds is None else torch.cat((preds, logits), dim=0)
             if labels is not None:
                 label_ids = labels if label_ids is None else torch.cat((label_ids, labels), dim=0)
+
+        self.eval_dataset_characters_calculated = True
 
         if self.args.past_index and hasattr(self, "_past"):
             # Clean the state at the end of the evaluation loop
@@ -1311,7 +1318,9 @@ class Trainer:
         else:
             metrics = {}
         if len(eval_losses) > 0:
-            metrics["eval_loss"] = np.sum(eval_losses) / samples_count
+            total_loss = np.sum(eval_losses)
+            metrics["eval_loss"] = total_loss / samples_count
+            metrics["eval_bpc"] = (total_loss / math.log(2)) / self.eval_dataset_characters
 
         # Prefix all keys with eval_
         for key in list(metrics.keys()):
