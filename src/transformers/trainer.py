@@ -1361,11 +1361,13 @@ class Trainer:
             metrics = {}
         if len(eval_losses) > 0:
             if self.args.local_rank != -1:
-                metrics["eval_loss"] = (
-                    distributed_broadcast_scalars(eval_losses, num_total_examples=samples_count)
-                    .mean()
+                total_loss = (
+                    distributed_broadcast_scalars(eval_losses, num_total_examples=self.num_examples(dataloader))
+                    .sum()
                     .item()
                 )
+                metrics["eval_loss"] = total_loss / samples_count
+                metrics["eval_bpc"] = (total_loss / math.log(2)) / self.eval_dataset_characters
             else:
                 total_loss = np.sum(eval_losses)
                 metrics["eval_loss"] = total_loss / samples_count
