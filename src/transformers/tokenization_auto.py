@@ -27,6 +27,7 @@ from .configuration_auto import (
     DistilBertConfig,
     ElectraConfig,
     FlaubertConfig,
+    FunnelConfig,
     GPT2Config,
     LongformerConfig,
     LxmertConfig,
@@ -54,6 +55,7 @@ from .tokenization_ctrl import CTRLTokenizer
 from .tokenization_distilbert import DistilBertTokenizer, DistilBertTokenizerFast
 from .tokenization_electra import ElectraTokenizer, ElectraTokenizerFast
 from .tokenization_flaubert import FlaubertTokenizer
+from .tokenization_funnel import FunnelTokenizer, FunnelTokenizerFast
 from .tokenization_gpt2 import GPT2Tokenizer, GPT2TokenizerFast
 from .tokenization_longformer import LongformerTokenizer, LongformerTokenizerFast
 from .tokenization_lxmert import LxmertTokenizer, LxmertTokenizerFast
@@ -93,6 +95,7 @@ TOKENIZER_MAPPING = OrderedDict(
         (RobertaConfig, (RobertaTokenizer, RobertaTokenizerFast)),
         (ReformerConfig, (ReformerTokenizer, None)),
         (ElectraConfig, (ElectraTokenizer, ElectraTokenizerFast)),
+        (FunnelConfig, (FunnelTokenizer, FunnelTokenizerFast)),
         (LxmertConfig, (LxmertTokenizer, LxmertTokenizerFast)),
         (BertConfig, (BertTokenizer, BertTokenizerFast)),
         (OpenAIGPTConfig, (OpenAIGPTTokenizer, OpenAIGPTTokenizerFast)),
@@ -131,6 +134,7 @@ class AutoTokenizer:
         - `xlm`: XLMTokenizer (XLM model)
         - `ctrl`: CTRLTokenizer (Salesforce CTRL model)
         - `electra`: ElectraTokenizer (Google ELECTRA model)
+        - `funnel`: FunnelTokenizer (Funnel Transformer model)
         - `lxmert`: LxmertTokenizer (Lxmert model)
 
     This class cannot be instantiated using `__init__()` (throw an error).
@@ -167,6 +171,7 @@ class AutoTokenizer:
             - `xlm`: XLMTokenizer (XLM model)
             - `ctrl`: CTRLTokenizer (Salesforce CTRL model)
             - `electra`: ElectraTokenizer (Google ELECTRA model)
+            - `funnel`: FunnelTokenizer (Funnel Transformer model)
             - `lxmert`: LxmertTokenizer (Lxmert model)
 
         Params:
@@ -217,6 +222,17 @@ class AutoTokenizer:
             return BertJapaneseTokenizer.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
 
         use_fast = kwargs.pop("use_fast", False)
+
+        if config.tokenizer_class is not None:
+            if use_fast and not config.tokenizer_class.endswith("Fast"):
+                tokenizer_class_candidate = f"{config.tokenizer_class}Fast"
+            else:
+                tokenizer_class_candidate = config.tokenizer_class
+            tokenizer_class = globals().get(tokenizer_class_candidate)
+            if tokenizer_class is None:
+                raise ValueError("Tokenizer class {} does not exist or is not currently imported.")
+            return tokenizer_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
+
         for config_class, (tokenizer_class_py, tokenizer_class_fast) in TOKENIZER_MAPPING.items():
             if isinstance(config, config_class):
                 if tokenizer_class_fast and use_fast:
