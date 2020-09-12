@@ -13,6 +13,7 @@ import numpy as np
 import torch
 from packaging import version
 from torch import nn
+from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch.utils.data.dataloader import DataLoader
 from torch.utils.data.dataset import Dataset
 from torch.utils.data.distributed import DistributedSampler
@@ -762,7 +763,9 @@ class Trainer:
                     else:
                         self.optimizer.step()
 
-                    self.lr_scheduler.step()
+                    if type(self.lr_scheduler) != ReduceLROnPlateau:
+                        self.lr_scheduler.step()
+
                     model.zero_grad()
                     self.global_step += 1
                     self.epoch = epoch + (step + 1) / len(epoch_iterator)
@@ -851,6 +854,9 @@ class Trainer:
                     )
             if (self.args.max_steps > 0 and self.global_step >= self.args.max_steps) or patience_should_stop:
                 break
+
+        if type(self.lr_scheduler) == ReduceLROnPlateau:
+            self.lr_scheduler.step(logging_loss_scalar)
 
         # train_pbar.close()
         step_pbar.close()
