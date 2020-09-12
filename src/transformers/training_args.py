@@ -58,6 +58,8 @@ class TrainingArguments:
             The batch size per GPU/TPU core/CPU for training.
         per_device_eval_batch_size (:obj:`int`, `optional`, defaults to 8):
             The batch size per GPU/TPU core/CPU for evaluation.
+        is_dataset_pre_batched (:obj:`bool`, `optional`, defaults to False):
+            Whether dataset is already batched. If True, disables batching of dataset output.
         gradient_accumulation_steps: (:obj:`int`, `optional`, defaults to 1):
             Number of updates steps to accumulate the gradients for, before performing a backward/update pass.
 
@@ -172,6 +174,9 @@ class TrainingArguments:
     )
     per_device_eval_batch_size: int = field(
         default=8, metadata={"help": "Batch size per GPU/TPU core/CPU for evaluation."}
+    )
+    is_dataset_pre_batched: bool = field(
+        default=False, metadata={"help": "Whether dataset is already batched. If True, disables batching of dataset output."}
     )
 
     per_gpu_train_batch_size: Optional[int] = field(
