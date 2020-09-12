@@ -345,7 +345,7 @@ class Trainer:
 
         return DataLoader(
             self.train_dataset,
-            batch_size=self.args.train_batch_size,
+            batch_size=self.args.train_batch_size if not self.args.is_dataset_pre_batched else None,
             sampler=train_sampler,
             collate_fn=self.data_collator,
             drop_last=self.args.dataloader_drop_last,
@@ -385,7 +385,7 @@ class Trainer:
         return DataLoader(
             eval_dataset,
             sampler=eval_sampler,
-            batch_size=self.args.eval_batch_size,
+            batch_size=self.args.eval_batch_size if not self.args.is_dataset_pre_batched else None,
             collate_fn=self.data_collator,
             drop_last=self.args.dataloader_drop_last,
         )

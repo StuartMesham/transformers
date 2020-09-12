@@ -466,7 +466,10 @@ class GPT2Model(GPT2PreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
-        self.wte = nn.Embedding(config.vocab_size, config.n_embd)
+        if config.vocab_size is not None:
+            self.wte = nn.Embedding(config.vocab_size, config.n_embd)
+        else:
+            self.wte = None
         self.wpe = nn.Embedding(config.n_positions, config.n_embd)
         if config.type_vocab_size is not None:
             self.tte = nn.Embedding(config.type_vocab_size, config.n_embd)
@@ -550,6 +553,9 @@ class GPT2Model(GPT2PreTrainedModel):
         else:
             if self.tte is not None:
                 raise ValueError("You have to specify token_type_ids when the model's type_vocab_size is set")
+
+        if inputs_embeds is None and self.wte is None:
+            raise ValueError("You have to specify inputs_embeds when the model's vocab_size is not set")
 
         if position_ids is not None:
             position_ids = position_ids.view(-1, input_shape[-1])
