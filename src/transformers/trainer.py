@@ -344,7 +344,7 @@ class Trainer:
 
         return DataLoader(
             self.train_dataset,
-            batch_size=self.args.train_batch_size,
+            batch_size=None,
             sampler=train_sampler,
             collate_fn=self.data_collator,
             drop_last=self.args.dataloader_drop_last,
