@@ -471,10 +471,10 @@ class GPT2Model(GPT2PreTrainedModel):
         else:
             self.wte = None
         self.wpe = nn.Embedding(config.n_positions, config.n_embd)
-        if config.type_vocab_size is not None:
-            self.tte = nn.Embedding(config.type_vocab_size, config.n_embd)
-        else:
-            self.tte = None
+        # if config.type_vocab_size is not None:
+        #     self.tte = nn.Embedding(config.type_vocab_size, config.n_embd)
+        # else:
+        self.tte = None
         self.drop = nn.Dropout(config.embd_pdrop)
         self.h = nn.ModuleList([Block(config.n_ctx, config, scale=True) for _ in range(config.n_layer)])
         self.ln_f = nn.LayerNorm(config.n_embd, eps=config.layer_norm_epsilon)
