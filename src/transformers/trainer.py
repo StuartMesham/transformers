@@ -658,7 +658,7 @@ class Trainer:
             )
 
         if self.tb_writer is not None and self.args.hparams is not None:
-            self.tb_writer.add_text('hparams', json.dumps(self.args.hparams))
+            self.tb_writer.add_text('hparams', repr(self.args.hparams))
         #     self.tb_writer.add_hparams(self.args.to_sanitized_dict(), metric_dict={})
 
         # Train!
