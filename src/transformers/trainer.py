@@ -184,8 +184,8 @@ class Trainer:
         eval_dataset (:obj:`torch.utils.data.dataset.Dataset`, `optional`):
              The dataset to use for evaluation. If it is an :obj:`nlp.Dataset`, columns not accepted by the
             ``model.forward()`` method are automatically removed.
-        tokenizer (:class:`PreTrainedTokenizerBase`, `optional`):
-            The tokenizer used to preprocess the data. If provided, will be used to automatically pad the inputs the
+        tokenizer (:obj:`Dict[int, "PreTrainedTokenizerBase"]`, `optional`):
+            The tokenizers used to preprocess the data for each language. If provided, will be used to automatically pad the inputs the
             maximum length when batching inputs, and it will be saved along the model to make it easier to rerun an
             interrupted training or reuse the fine-tuned model.
         model_init (:obj:`Callable[[], PreTrainedModel]`, `optional`):
@@ -211,7 +211,7 @@ class Trainer:
         data_collator: Optional[DataCollator] = None,
         train_dataset: Optional[Dataset] = None,
         eval_dataset: Optional[Dataset] = None,
-        tokenizer: Optional["PreTrainedTokenizerBase"] = None,
+        tokenizers: Optional[Dict[int, "PreTrainedTokenizerBase"]] = None,
         model_init: Callable[[], PreTrainedModel] = None,
         compute_metrics: Optional[Callable[[EvalPrediction], Dict]] = None,
         tb_writer: Optional["SummaryWriter"] = None,
@@ -231,13 +231,13 @@ class Trainer:
         if model is None and model_init is not None:
             model = model_init()
         self.model = model.to(args.device) if model is not None else None
-        default_collator = default_data_collator if tokenizer is None else DataCollatorWithPadding(tokenizer)
+        default_collator = default_data_collator # if tokenizer is None else DataCollatorWithPadding(tokenizer)
         if self.args.patience > 0 and not self.args.evaluate_during_training:
             raise ValueError("Patience requires evaluate_during_training.")
         self.data_collator = data_collator if data_collator is not None else default_collator
         self.train_dataset = train_dataset
         self.eval_dataset = eval_dataset
-        self.tokenizer = tokenizer
+        self.tokenizers = tokenizers
         self.model_init = model_init
         self.compute_metrics = compute_metrics
         self.log_to_console = log_to_console
@@ -1152,8 +1152,9 @@ class Trainer:
         xm.rendezvous("saving_checkpoint")
         self._store_flos()
         self.model.save_pretrained(output_dir)
-        if self.tokenizer is not None:
-            self.tokenizer.save_pretrained(output_dir)
+        if self.tokenizers is not None:
+            for language_id, tokenizer in self.tokenizers.items():
+                tokenizer.save_pretrained(os.path.join(output_dir, os.path.join('tokenizers', str(language_id))))
 
     def _save(self, output_dir: Optional[str] = None):
         output_dir = output_dir if output_dir is not None else self.args.output_dir
@@ -1165,8 +1166,9 @@ class Trainer:
             raise ValueError("Trainer.model appears to not be a PreTrainedModel")
         self._store_flos()
         self.model.save_pretrained(output_dir)
-        if self.tokenizer is not None:
-            self.tokenizer.save_pretrained(output_dir)
+        if self.tokenizers is not None:
+            for language_id, tokenizer in self.tokenizers.items():
+                tokenizer.save_pretrained(os.path.join(output_dir, os.path.join('tokenizers', str(language_id))))
 
         # Good practice: save your training arguments together with the trained model
         torch.save(self.args, os.path.join(output_dir, "training_args.bin"))
@@ -1317,10 +1319,10 @@ class Trainer:
         samples_count = 0
         for inputs in tqdm(dataloader, desc=description, disable=disable_tqdm):
             loss, logits, labels = self.prediction_step(model, inputs, prediction_loss_only)
-            batch_size = inputs[list(inputs.keys())[0]].numel()
+            batch_size = inputs['input_ids'].numel()
             samples_count += batch_size
             if not self.eval_dataset_characters_calculated:
-                self.eval_dataset_characters += len(self.tokenizer.decode(inputs['input_ids'].view(-1).tolist()))
+                self.eval_dataset_characters += len(self.tokenizers[inputs['language']].decode(inputs['input_ids'].view(-1).tolist()))
             if loss is not None:
                 eval_losses.append(loss * batch_size)
             if logits is not None:
