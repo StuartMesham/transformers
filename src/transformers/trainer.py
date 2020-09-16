@@ -784,7 +784,7 @@ class Trainer:
                         )
                         logging_loss_scalar = tr_loss_scalar
 
-                        self.log(logs)
+                        self.log(logs, tb_tag='train')
 
                     if self.args.evaluate_during_training and self.global_step % self.args.eval_steps == 0:
                         metrics = self.evaluate()
@@ -948,7 +948,7 @@ class Trainer:
         self.hp_search_backend = None
         return best_run
 
-    def log(self, logs: Dict[str, float], iterator: Optional[tqdm] = None) -> None:
+    def log(self, logs: Dict[str, float], iterator: Optional[tqdm] = None, tb_tag: str = None) -> None:
         """
         Log :obj:`logs` on the various objects watching training.
 
@@ -985,7 +985,8 @@ class Trainer:
         if self.tb_writer:
             for k, v in logs.items():
                 if isinstance(v, (int, float)):
-                    self.tb_writer.add_scalar(k, v, self.global_step)
+                    label = tb_tag + '/' + k if tb_tag is not None else k
+                    self.tb_writer.add_scalar(label, v, self.global_step)
                 else:
                     logger.warning(
                         "Trainer is attempting to log a value of "
@@ -1245,7 +1246,7 @@ class Trainer:
 
         output = self.prediction_loop(eval_dataloader, description="Evaluation")
 
-        self.log(output.metrics)
+        self.log(output.metrics, tb_tag='eval')
 
         if self.args.tpu_metrics_debug or self.args.debug:
             # tpu-comment: Logging debug metrics for PyTorch/XLA (compile, execute times, ops, etc.)
