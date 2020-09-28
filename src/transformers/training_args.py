@@ -169,6 +169,10 @@ class TrainingArguments:
         },
     )
 
+    num_workers: Optional[int] = field(
+        default=0, metadata={"help": "How many workers to use for DataLoader"}
+    )
+
     per_device_train_batch_size: int = field(
         default=8, metadata={"help": "Batch size per GPU/TPU core/CPU for training."}
     )
