@@ -1,3 +1,5 @@
+# Modified code is commented with "CUSTOM CODE"
+
 import dataclasses
 import json
 import os
@@ -159,6 +161,7 @@ class TrainingArguments:
         default=False,
         metadata={"help": "When performing evaluation and predictions, only returns the loss."},
     )
+    # --------------------------START CUSTOM CODE FROM PATIENCE PR---------------------------------
     patience: int = field(
         default=-1,
         metadata={
@@ -168,6 +171,8 @@ class TrainingArguments:
             )
         },
     )
+    # --------------------------END CUSTOM CODE FROM PATIENCE PR---------------------------------
+
 
     per_device_train_batch_size: int = field(
         default=8, metadata={"help": "Batch size per GPU/TPU core/CPU for training."}
@@ -175,9 +180,11 @@ class TrainingArguments:
     per_device_eval_batch_size: int = field(
         default=8, metadata={"help": "Batch size per GPU/TPU core/CPU for evaluation."}
     )
+    # --------------------------START CUSTOM CODE---------------------------------
     is_dataset_pre_batched: bool = field(
         default=False, metadata={"help": "Whether dataset is already batched. If True, disables batching of dataset output."}
     )
+    # --------------------------END CUSTOM CODE---------------------------------
 
     per_gpu_train_batch_size: Optional[int] = field(
         default=None,
@@ -266,6 +273,7 @@ class TrainingArguments:
     run_name: Optional[str] = field(
         default=None, metadata={"help": "An optional descriptor for the run. Notably used for wandb logging."}
     )
+    # --------------------------START CUSTOM CODE---------------------------------
     disable_train_tqdm: Optional[bool] = field(
         default=None, metadata={"help": "Whether or not to disable the tqdm progress bars during training."}
     )
@@ -276,12 +284,15 @@ class TrainingArguments:
     hparams: Optional[dict] = field(
         default=None, metadata={"help": "hyper parameters to log with tensorboard run"}
     )
+    # --------------------------END CUSTOM CODE---------------------------------
 
     def __post_init__(self):
+        # --------------------------START CUSTOM CODE---------------------------------
         if self.disable_train_tqdm is None:
             self.disable_train_tqdm = logger.getEffectiveLevel() > logging.WARN
         if self.disable_prediction_tqdm is None:
             self.disable_prediction_tqdm = logger.getEffectiveLevel() > logging.WARN
+        # --------------------------END CUSTOM CODE---------------------------------
 
     remove_unused_columns: Optional[bool] = field(
         default=True, metadata={"help": "Remove columns not required by the model when using an nlp.Dataset."}

@@ -1,3 +1,5 @@
+# Modified code is commented with "CUSTOM CODE"
+
 import inspect
 import json
 import math
@@ -212,12 +214,12 @@ class Trainer:
         data_collator: Optional[DataCollator] = None,
         train_dataset: Optional[Dataset] = None,
         eval_dataset: Optional[Dataset] = None,
-        tokenizers: Optional[Dict[int, "PreTrainedTokenizerBase"]] = None,
+        tokenizers: Optional[Dict[int, "PreTrainedTokenizerBase"]] = None,  # CUSTOM CODE
         model_init: Callable[[], PreTrainedModel] = None,
         compute_metrics: Optional[Callable[[EvalPrediction], Dict]] = None,
         tb_writer: Optional["SummaryWriter"] = None,
         optimizers: Tuple[torch.optim.Optimizer, torch.optim.lr_scheduler.LambdaLR] = (None, None),
-        log_to_console=True,
+        log_to_console=True,  # CUSTOM CODE
         **kwargs,
     ):
         if args is None:
@@ -232,16 +234,18 @@ class Trainer:
         if model is None and model_init is not None:
             model = model_init()
         self.model = model.to(args.device) if model is not None else None
+        # -------------------------START CUSTOM CODE FROM PATIENCE PR-------------------------------
         default_collator = default_data_collator # if tokenizer is None else DataCollatorWithPadding(tokenizer)
         if self.args.patience > 0 and not self.args.evaluate_during_training:
             raise ValueError("Patience requires evaluate_during_training.")
+        # ---------------------------END CUSTOM CODE FROM PATIENCE PR-------------------------------
         self.data_collator = data_collator if data_collator is not None else default_collator
         self.train_dataset = train_dataset
         self.eval_dataset = eval_dataset
-        self.tokenizers = tokenizers
+        self.tokenizers = tokenizers  # CUSTOM CODE
         self.model_init = model_init
         self.compute_metrics = compute_metrics
-        self.log_to_console = log_to_console
+        self.log_to_console = log_to_console  # CUSTOM CODE
         self.optimizer, self.lr_scheduler = optimizers
         if model_init is not None and (self.optimizer is not None or self.lr_scheduler is not None):
             raise RuntimeError(
@@ -299,8 +303,10 @@ class Trainer:
         self.hp_search_backend = None
         self.use_tune_checkpoints = False
 
+        # -----------------------------START CUSTOM CODE--------------------------
         self.eval_dataset_characters = 0
         self.eval_dataset_characters_calculated = False
+        # -------------------------------END CUSTOM CODE--------------------------
 
     def _remove_unused_columns(self, dataset: "nlp.Dataset", description: Optional[str] = None):
         if not self.args.remove_unused_columns:
@@ -345,7 +351,7 @@ class Trainer:
 
         return DataLoader(
             self.train_dataset,
-            batch_size=self.args.train_batch_size if not self.args.is_dataset_pre_batched else None,
+            batch_size=self.args.train_batch_size if not self.args.is_dataset_pre_batched else None,  # CUSTOM CODE
             sampler=train_sampler,
             collate_fn=self.data_collator,
             drop_last=self.args.dataloader_drop_last,
@@ -385,7 +391,7 @@ class Trainer:
         return DataLoader(
             eval_dataset,
             sampler=eval_sampler,
-            batch_size=self.args.eval_batch_size if not self.args.is_dataset_pre_batched else None,
+            batch_size=self.args.eval_batch_size if not self.args.is_dataset_pre_batched else None,  # CUSTOM CODE
             collate_fn=self.data_collator,
             drop_last=self.args.dataloader_drop_last,
         )
@@ -657,9 +663,10 @@ class Trainer:
                 find_unused_parameters=True,
             )
 
+        # ------------------------START CUSTOM CODE----------------------------
         if self.tb_writer is not None and self.args.hparams is not None:
             self.tb_writer.add_text('hparams', repr(self.args.hparams))
-        #     self.tb_writer.add_hparams(self.args.to_sanitized_dict(), metric_dict={})
+        # --------------------------END CUSTOM CODE----------------------------
 
         # Train!
         if is_torch_tpu_available():
@@ -707,13 +714,16 @@ class Trainer:
 
         tr_loss = torch.tensor(0.0).to(self.args.device)
         logging_loss_scalar = 0.0
+        # -------------------------START CUSTOM CODE FROM PATIENCE PR-------------------------------
         patience_best_eval_loss = None
         patience_evals_without_improvement = 0
         patience_should_stop = False
+        # --------------------------END CUSTOM CODE FROM PATIENCE PR--------------------------------
         model.zero_grad()
+        # ------------------------------------START CUSTOM CODE-------------------------------------
         disable_tqdm = self.args.disable_train_tqdm or not self.is_local_process_zero()
         step_pbar = trange(self.global_step, t_total, desc="Step", disable=disable_tqdm)
-        # train_pbar = trange(epochs_trained, int(np.ceil(num_train_epochs)), desc="Epoch", disable=disable_tqdm)
+        # -------------------------------------END CUSTOM CODE--------------------------------------
         for epoch in range(epochs_trained, int(np.ceil(num_train_epochs))):
             if isinstance(train_dataloader, DataLoader) and isinstance(train_dataloader.sampler, DistributedSampler):
                 train_dataloader.sampler.set_epoch(epoch)
@@ -730,13 +740,11 @@ class Trainer:
             if self.args.past_index >= 0:
                 self._past = None
 
-            # epoch_pbar = tqdm(epoch_iterator, desc="Iteration", disable=disable_tqdm)
             for step, inputs in enumerate(epoch_iterator):
 
                 # Skip past any already trained steps if resuming training
                 if steps_trained_in_current_epoch > 0:
                     steps_trained_in_current_epoch -= 1
-                    # epoch_pbar.update(1)
                     continue
 
                 tr_loss += self.training_step(model, inputs)
@@ -784,11 +792,13 @@ class Trainer:
                         )
                         logging_loss_scalar = tr_loss_scalar
 
-                        self.log(logs, tb_tag='train')
+                        self.log(logs, tb_tag='train')  # CUSTOM CODE
 
                     if self.args.evaluate_during_training and self.global_step % self.args.eval_steps == 0:
                         metrics = self.evaluate()
                         self._report_to_hp_search(trial, epoch, metrics)
+
+                        # -------------------------START CUSTOM CODE FROM PATIENCE PR-------------------------------
 
                         if self.args.patience > 0:
                             # Keep track of best loss to determine if we should stop early
@@ -803,6 +813,7 @@ class Trainer:
                                     logger.info(
                                         f"Patience threshold ({self.args.patience}) exceeded, stopping training"
                                     )
+                        # --------------------------END CUSTOM CODE FROM PATIENCE PR--------------------------------
 
                     if self.args.save_steps > 0 and self.global_step % self.args.save_steps == 0:
                         # In all cases (even distributed/parallel), self.model is always a reference
@@ -837,12 +848,12 @@ class Trainer:
                             torch.save(self.optimizer.state_dict(), os.path.join(output_dir, "optimizer.pt"))
                             torch.save(self.lr_scheduler.state_dict(), os.path.join(output_dir, "scheduler.pt"))
 
-                # epoch_pbar.update(1)
                 step_pbar.update(1)
+                # -------------------------START CUSTOM CODE FROM PATIENCE PR-------------------------------
                 if (self.args.max_steps > 0 and self.global_step >= self.args.max_steps) or patience_should_stop:
                     break
-            # epoch_pbar.close()
-            # train_pbar.update(1)
+                # --------------------------END CUSTOM CODE FROM PATIENCE PR--------------------------------
+
             if self.args.tpu_metrics_debug or self.args.debug:
                 if is_torch_tpu_available():
                     # tpu-comment: Logging debug metrics for PyTorch/XLA (compile, execute times, ops, etc.)
@@ -852,13 +863,14 @@ class Trainer:
                         "You enabled PyTorch/XLA debug metrics but you don't have a TPU "
                         "configured. Check your training configuration if this is unexpected."
                     )
+            # -------------------------START CUSTOM CODE FROM PATIENCE PR-------------------------------
             if (self.args.max_steps > 0 and self.global_step >= self.args.max_steps) or patience_should_stop:
                 break
+            # --------------------------END CUSTOM CODE FROM PATIENCE PR--------------------------------
 
         if type(self.lr_scheduler) == ReduceLROnPlateau:
             self.lr_scheduler.step(logging_loss_scalar)
 
-        # train_pbar.close()
         step_pbar.close()
         if self.tb_writer:
             self.tb_writer.close()
@@ -948,7 +960,7 @@ class Trainer:
         self.hp_search_backend = None
         return best_run
 
-    def log(self, logs: Dict[str, float], iterator: Optional[tqdm] = None, tb_tag: str = None) -> None:
+    def log(self, logs: Dict[str, float], iterator: Optional[tqdm] = None, tb_tag: str = None) -> None:  # CUSTOM CODE
         """
         Log :obj:`logs` on the various objects watching training.
 
@@ -985,8 +997,10 @@ class Trainer:
         if self.tb_writer:
             for k, v in logs.items():
                 if isinstance(v, (int, float)):
+                    # ----------------------------START CUSTOM CODE -----------------------------------
                     label = tb_tag + '/' + k if tb_tag is not None else k
                     self.tb_writer.add_scalar(label, v, self.global_step)
+                    # -----------------------------END CUSTOM CODE ------------------------------------
                 else:
                     logger.warning(
                         "Trainer is attempting to log a value of "
@@ -1011,7 +1025,7 @@ class Trainer:
             self.log_history.append(output)
         if iterator is not None:
             iterator.write(output)
-        elif self.log_to_console:
+        elif self.log_to_console:  # CUSTOM CODE
             print(output)
 
     def _prepare_inputs(self, inputs: Dict[str, Union[torch.Tensor, Any]]) -> Dict[str, Union[torch.Tensor, Any]]:
@@ -1159,9 +1173,11 @@ class Trainer:
         xm.rendezvous("saving_checkpoint")
         self._store_flos()
         self.model.save_pretrained(output_dir)
+        # ----------------------------START CUSTOM CODE------------------------------------
         if self.tokenizers is not None:
             for language_id, tokenizer in self.tokenizers.items():
                 tokenizer.save_pretrained(os.path.join(output_dir, os.path.join('tokenizers', str(language_id))))
+        # -----------------------------END CUSTOM CODE------------------------------------
 
     def _save(self, output_dir: Optional[str] = None):
         output_dir = output_dir if output_dir is not None else self.args.output_dir
@@ -1173,9 +1189,11 @@ class Trainer:
             raise ValueError("Trainer.model appears to not be a PreTrainedModel")
         self._store_flos()
         self.model.save_pretrained(output_dir)
+        # ----------------------------START CUSTOM CODE------------------------------------
         if self.tokenizers is not None:
             for language_id, tokenizer in self.tokenizers.items():
                 tokenizer.save_pretrained(os.path.join(output_dir, os.path.join('tokenizers', str(language_id))))
+        # -----------------------------END CUSTOM CODE------------------------------------
 
         # Good practice: save your training arguments together with the trained model
         torch.save(self.args, os.path.join(output_dir, "training_args.bin"))
@@ -1246,7 +1264,7 @@ class Trainer:
 
         output = self.prediction_loop(eval_dataloader, description="Evaluation")
 
-        self.log(output.metrics, tb_tag='eval')
+        self.log(output.metrics, tb_tag='eval')  # CUSTOM CODE
 
         if self.args.tpu_metrics_debug or self.args.debug:
             # tpu-comment: Logging debug metrics for PyTorch/XLA (compile, execute times, ops, etc.)
@@ -1322,22 +1340,24 @@ class Trainer:
         if self.args.past_index >= 0:
             self._past = None
 
-        disable_tqdm = not self.is_local_process_zero() or self.args.disable_prediction_tqdm
-        samples_count = 0
+        disable_tqdm = not self.is_local_process_zero() or self.args.disable_prediction_tqdm  # CUSTOM CODE
+        samples_count = 0  # CUSTOM CODE
         for inputs in tqdm(dataloader, desc=description, disable=disable_tqdm):
             loss, logits, labels = self.prediction_step(model, inputs, prediction_loss_only)
+            # -----------------------------START CUSTOM CODE------------------------------------
             batch_size = inputs['input_ids'].numel()
             samples_count += batch_size
             if not self.eval_dataset_characters_calculated:
                 self.eval_dataset_characters += len(self.tokenizers[inputs['language']].decode(inputs['input_ids'].view(-1).tolist()))
             if loss is not None:
                 eval_losses.append(loss * batch_size)
+            # -----------------------------END CUSTOM CODE------------------------------------
             if logits is not None:
                 preds = logits if preds is None else torch.cat((preds, logits), dim=0)
             if labels is not None:
                 label_ids = labels if label_ids is None else torch.cat((label_ids, labels), dim=0)
 
-        self.eval_dataset_characters_calculated = True
+        self.eval_dataset_characters_calculated = True  # CUSTOM CODE
 
         if self.args.past_index and hasattr(self, "_past"):
             # Clean the state at the end of the evaluation loop
@@ -1372,15 +1392,17 @@ class Trainer:
             if self.args.local_rank != -1:
                 total_loss = (
                     distributed_broadcast_scalars(eval_losses, num_total_examples=self.num_examples(dataloader))
-                    .sum()
+                    .sum()  # CUSTOM CODE
                     .item()
                 )
+                # -----------------------------START CUSTOM CODE------------------------------------
                 metrics["eval_loss"] = total_loss / samples_count
                 metrics["eval_bpc"] = (total_loss / math.log(2)) / self.eval_dataset_characters
             else:
                 total_loss = np.sum(eval_losses)
                 metrics["eval_loss"] = total_loss / samples_count
                 metrics["eval_bpc"] = (total_loss / math.log(2)) / self.eval_dataset_characters
+                # ------------------------------END CUSTOM CODE-------------------------------------
 
         # Prefix all keys with eval_
         for key in list(metrics.keys()):
